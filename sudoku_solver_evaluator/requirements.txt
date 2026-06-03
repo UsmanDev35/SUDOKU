@@ -1,0 +1,4 @@
+rich
+hypothesis
+pytest
+pytest-cov
