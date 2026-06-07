@@ -1,0 +1,392 @@
+================================================================================
+       AI-POWERED MULTI-LEVEL SUDOKU SOLVER AND EVALUATOR
+                    VIVA EXPLANATION GUIDE
+                    CSC202 - Artificial Intelligence
+================================================================================
+
+TABLE OF CONTENTS:
+1. Project Overview
+2. How to Run
+3. Problem Formulation (CSP)
+4. Algorithm 1: Backtracking Search (Uninformed)
+5. Algorithm 2: AC-3 + MRV + Degree Heuristic (Informed)
+6. Algorithm 3: Simulated Annealing (Local Search)
+7. Algorithm 4: Forward Checking with Constraint Propagation
+8. Puzzle Generation Logic
+9. Performance Evaluation
+10. Adversarial Mode
+11. Key Differences Between Algorithms
+12. Common Viva Questions & Answers
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+This project solves Sudoku puzzles using 4 different AI search strategies and
+compares their performance. It demonstrates:
+- Constraint Satisfaction Problem (CSP) formulation
+- Uninformed search (Backtracking)
+- Informed search (AC-3 + MRV heuristic)
+- Local search (Simulated Annealing)
+- Constraint Propagation (Forward Checking)
+
+The system can:
+- Generate puzzles at 4 difficulty levels (Easy, Medium, Hard, Expert)
+- Solve them with any of the 4 algorithms
+- Show step-by-step animation of the solving process
+- Compare all algorithms' performance side by side
+- Race two algorithms against each other (Adversarial Mode)
+
+================================================================================
+2. HOW TO RUN
+================================================================================
+
+Console Mode:
+    python -m sudoku_solver_evaluator.main
+
+GUI Mode (Tkinter):
+    python -m sudoku_solver_evaluator.main --gui
+
+Run Tests:
+    python -m pytest sudoku_solver_evaluator/tests/ -v
+
+================================================================================
+3. PROBLEM FORMULATION (CSP - Constraint Satisfaction Problem)
+================================================================================
+
+Sudoku is formulated as a CSP:
+
+VARIABLES:
+- 81 cells in a 9x9 grid. Each empty cell is a variable.
+
+DOMAINS:
+- Each variable can take values {1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+CONSTRAINTS:
+- Row constraint: All cells in the same row must have different values
+- Column constraint: All cells in the same column must have different values
+- Box constraint: All cells in the same 3x3 box must have different values
+
+GOAL:
+- Assign a value to every variable such that ALL constraints are satisfied
+
+This is what makes Sudoku a "Complex Computing Problem" - it's NP-complete
+in the general case, meaning brute force would be extremely slow without
+intelligent search strategies.
+
+================================================================================
+4. ALGORITHM 1: BACKTRACKING SEARCH (Uninformed)
+================================================================================
+
+TYPE: Uninformed Search (no domain knowledge used)
+FILE: solvers/backtracking.py
+
+HOW IT WORKS:
+1. Start at the first empty cell (top-left, going right then down)
+2. Try value 1 in that cell
+3. Check if it violates any constraint (row, column, box)
+4. If valid: move to the next empty cell and repeat
+5. If ALL values 1-9 fail: BACKTRACK (go back to previous cell, try next value)
+6. Continue until all cells are filled (SOLVED) or no solution exists
+
+SIMPLE EXAMPLE:
+- Cell (0,2) is empty. Try 1... conflict in row! Try 2... conflict in box!
+  Try 3... no conflict! Move to next cell.
+- Cell (0,3) is empty. Try 1-9... all fail! BACKTRACK to (0,2), try 4...
+
+KEY PROPERTIES:
+- Order: Left-to-right, top-to-bottom (fixed order)
+- Values tried: Always 1, 2, 3, 4, 5, 6, 7, 8, 9 in sequence
+- Completeness: Will ALWAYS find a solution if one exists
+- Optimality: Not optimal - explores many unnecessary states
+- Typically explores thousands of states (e.g., 5000-100000 for hard puzzles)
+
+METRICS TRACKED:
+- States explored: +1 each time a value is assigned
+- Backtracks: +1 each time an assignment is undone
+
+================================================================================
+5. ALGORITHM 2: AC-3 + MRV + DEGREE HEURISTIC (Informed)
+================================================================================
+
+TYPE: Informed Search (uses domain knowledge and heuristics)
+FILE: solvers/informed.py
+
+THREE KEY TECHNIQUES:
+
+A) AC-3 (Arc Consistency Algorithm #3):
+   - Before we even start searching, ELIMINATE impossible values
+   - Rule: If cell A must be 5 (only value in domain), then remove 5 from
+     all cells in same row, column, and box
+   - This cascades: removing values can make other cells have only 1 option
+   - Result: Many cells get solved WITHOUT any search!
+
+B) MRV (Minimum Remaining Values) Heuristic:
+   - Instead of going left-to-right, choose the cell with FEWEST possible values
+   - Why? If a cell has only 2 options, we'll detect a dead end faster
+   - This is the "fail-first" strategy - find problems early!
+
+C) Degree Heuristic (tie-breaker):
+   - If two cells have the same domain size, pick the one connected to
+     MORE unassigned cells
+   - This maximizes constraint propagation from each assignment
+
+HOW IT WORKS:
+1. Initialize domains for all empty cells (remove values of filled peers)
+2. Run AC-3 to prune domains (many cells may be auto-solved!)
+3. Pick the cell with smallest domain (MRV)
+4. Try a value, run AC-3 again on affected cells
+5. If any domain becomes empty -> backtrack and try next value
+6. Repeat until solved
+
+WHY IT'S BETTER THAN BACKTRACKING:
+- Typically solves Easy/Medium puzzles in 0-5 states (vs thousands!)
+- AC-3 eliminates most values before search begins
+- MRV prevents wasting time on cells with many options
+
+================================================================================
+6. ALGORITHM 3: SIMULATED ANNEALING (Local Search)
+================================================================================
+
+TYPE: Local Search / Optimization
+FILE: solvers/simulated_annealing.py
+
+KEY IDEA: Instead of building a solution step by step, START with a complete
+(but wrong) grid and IMPROVE it by reducing violations.
+
+HOW IT WORKS:
+1. INITIALIZE: Fill each 3x3 box with values 1-9 randomly (keeping fixed cells)
+   - After this, ALL box constraints are satisfied
+   - But rows and columns may have duplicates!
+
+2. COST FUNCTION: Count total duplicates in rows + columns
+   - A solved puzzle has cost = 0
+   - More duplicates = higher cost
+
+3. MAIN LOOP:
+   a. Pick a random 3x3 box
+   b. Pick two non-fixed cells in that box
+   c. Calculate: what would the cost be if we swap them?
+   d. If cost decreases or stays same: ACCEPT the swap
+   e. If cost increases: ACCEPT with probability e^(-delta/Temperature)
+   f. COOL DOWN: Temperature = Temperature x cooling_rate (0.99)
+
+4. RESTART: If temperature reaches minimum without solving, start over
+   with a new random initialization (up to 10 restarts)
+
+WHY ACCEPT WORSE MOVES?
+- To escape "local minima" (stuck states)
+- Early on (high temperature): accept bad moves often (explore widely)
+- Later (low temperature): rarely accept bad moves (converge to solution)
+- This is inspired by the physical process of annealing metals!
+
+PARAMETERS:
+- Initial temperature: 1.0
+- Cooling rate: 0.99 (multiply temp by this each step)
+- Minimum temperature: 0.001 (restart if reached)
+- Max restarts: 10
+
+NOTE: SA is probabilistic - it may NOT solve every puzzle (returns "FAILED"
+if max restarts exhausted). This is expected behavior for local search.
+
+================================================================================
+7. ALGORITHM 4: FORWARD CHECKING WITH CONSTRAINT PROPAGATION
+================================================================================
+
+TYPE: Constraint Propagation + Backtracking Search
+FILE: solvers/forward_checking.py
+
+THREE KEY TECHNIQUES:
+
+A) Forward Checking:
+   - When you assign value V to a cell, IMMEDIATELY remove V from all
+     peer cells' domains (same row, column, box)
+   - If any peer's domain becomes empty -> dead end! Backtrack immediately.
+   - This detects failures EARLY without trying further assignments.
+
+B) Naked Singles:
+   - If a cell's domain has only 1 value left -> assign it automatically
+   - This cascades: assigning a naked single may create more naked singles
+
+C) Hidden Singles:
+   - If a value appears in only ONE cell's domain within a row/column/box
+     -> that cell MUST have that value, assign it automatically
+   - Example: If only cell (2,5) can have value 7 in row 2, assign 7 there
+
+HOW IT WORKS:
+1. Initialize domains (remove values of filled peers)
+2. Apply Naked Singles + Hidden Singles propagation until no more changes
+3. Pick cell with smallest domain (MRV)
+4. Try a value:
+   a. Forward Check (remove from peers)
+   b. Propagate (Naked Singles + Hidden Singles)
+   c. If no empty domain -> recurse
+   d. If empty domain -> restore and try next value
+5. If no value works -> backtrack
+
+WHY IT'S VERY FAST:
+- Combines the best of both worlds:
+  - Early failure detection (forward checking)
+  - Automatic deduction (naked/hidden singles)
+  - Smart variable selection (MRV)
+- Often solves puzzles with ZERO backtracks!
+
+================================================================================
+8. PUZZLE GENERATION LOGIC
+================================================================================
+
+FILE: generator/puzzle_generator.py
+
+HOW PUZZLES ARE GENERATED:
+
+Step 1: Generate a COMPLETE valid Sudoku grid
+   - Use backtracking with random value ordering
+   - Random ordering ensures different puzzles each time
+
+Step 2: Remove cells one at a time
+   - For each removal, check: does the puzzle still have EXACTLY 1 solution?
+   - If yes: keep the cell empty
+   - If no (multiple solutions): put the value back, try another cell
+
+Step 3: Stop when target clue count is reached
+   - Easy: 36-45 clues (many hints)
+   - Medium: 27-35 clues
+   - Hard: 22-26 clues
+   - Expert: 17-21 clues (very few hints)
+
+UNIQUENESS CHECK:
+- Uses a fast bitmask-based solver that counts solutions
+- Stops as soon as 2 solutions are found (we only need to know if >1)
+- Uses MRV heuristic for speed
+
+DIFFICULTY STRATEGY:
+- Cells are removed in order of "constraint density" (cells with more
+  filled neighbors are removed first - they're safer to remove)
+- This makes Hard/Expert generation more reliable
+
+================================================================================
+9. PERFORMANCE EVALUATION
+================================================================================
+
+FILE: evaluator/performance.py
+
+METRICS RECORDED FOR EACH SOLVE:
+- Time (milliseconds): How long the algorithm took
+- States explored: How many value assignments were made
+- Backtracks: How many times the algorithm had to undo a choice
+
+COMPARISON:
+- Algorithms ranked by states_explored (fewer = more efficient)
+- Aggregate statistics: mean, min, max across multiple puzzles
+
+TYPICAL RESULTS (Easy puzzle):
+- Backtracking: ~100-500 states, ~50-200 backtracks
+- Informed (AC-3): ~0-5 states, 0 backtracks (solves by propagation alone!)
+- Forward Checking: ~45 states, 0 backtracks
+- Simulated Annealing: ~1000-5000 states, may fail sometimes
+
+================================================================================
+10. ADVERSARIAL MODE
+================================================================================
+
+FILE: adversarial/race.py
+
+HOW IT WORKS:
+1. User selects two different algorithms
+2. A puzzle is generated (Medium difficulty)
+3. Both algorithms run CONCURRENTLY (using Python threading)
+4. The one that finishes first WINS
+5. If both finish within 1 second of each other -> TIE
+6. If one times out (60s) -> the other wins
+
+IMPLEMENTATION:
+- Uses threading.Thread for concurrent execution
+- Uses threading.Event for cooperative cancellation
+- When one solver finishes, it signals the other to stop
+- Live status updated at least once per second
+
+================================================================================
+11. KEY DIFFERENCES BETWEEN ALGORITHMS
+================================================================================
+
++-------------------+-------------+------------+----------+---------+
+| Feature           | Backtracking| Informed   | SA       | Forward |
+|                   | (Uninformed)| (AC-3+MRV) |          |Checking |
++-------------------+-------------+------------+----------+---------+
+| Type              | DFS         | CSP+DFS    | Local    | CSP+DFS |
+| Uses heuristics   | No          | Yes (MRV)  | No       | Yes(MRV)|
+| Propagation       | No          | AC-3       | No       | FC+NS+HS|
+| Guaranteed solve  | Yes         | Yes        | NO       | Yes     |
+| Typical states    | 100-100K    | 0-50       | 1K-10K   | 45-100  |
+| Backtracks        | Many        | Very few   | N/A      | 0-few   |
+| Best for          | Simple      | All sizes  | Fun demo | All     |
++-------------------+-------------+------------+----------+---------+
+
+RANKING (fastest to slowest for most puzzles):
+1. Forward Checking (fastest - propagation + MRV)
+2. Informed / AC-3 (very fast - sometimes solves in 0 states!)
+3. Backtracking (slow but guaranteed)
+4. Simulated Annealing (slowest, may fail)
+
+================================================================================
+12. COMMON VIVA QUESTIONS & ANSWERS
+================================================================================
+
+Q: What is a CSP?
+A: Constraint Satisfaction Problem - variables with domains and constraints
+   between them. Sudoku has 81 variables, domain {1-9}, with row/column/box
+   all-different constraints.
+
+Q: What makes this a "Complex Computing Problem"?
+A: General Sudoku (NxN) is NP-complete. Brute force would try 9^81 
+   combinations. Our algorithms use intelligent strategies to solve it
+   in milliseconds instead.
+
+Q: Why is AC-3 better than basic backtracking?
+A: AC-3 eliminates impossible values BEFORE searching. If we know cell A 
+   must be 5, we remove 5 from all peers immediately. This cascading 
+   elimination often solves the puzzle without any guessing.
+
+Q: What is the MRV heuristic?
+A: Minimum Remaining Values - always pick the cell with fewest possible 
+   values. If a cell has only 2 options, we'll find dead ends faster.
+
+Q: Why does Simulated Annealing accept worse solutions?
+A: To escape local minima. Without this, the algorithm gets stuck in states
+   where no single swap improves the cost, but a series of swaps would.
+   The temperature controls how often we accept bad moves.
+
+Q: What is Forward Checking?
+A: When we assign a value to a cell, we immediately remove that value from
+   all peer cells' domains. If any domain becomes empty, we know this path
+   is dead and backtrack immediately (early failure detection).
+
+Q: What are Naked Singles and Hidden Singles?
+A: Naked Single: A cell has only 1 value in its domain -> must be that value.
+   Hidden Single: A value appears in only 1 cell's domain in a row/col/box
+   -> that cell must have that value. Both are auto-assigned.
+
+Q: How do you ensure generated puzzles have exactly one solution?
+A: After removing each cell, we run a solution counter (stops at 2).
+   If >1 solution exists, we put the cell back.
+
+Q: What is the difference between informed and uninformed search?
+A: Uninformed (backtracking): no knowledge about which cell to try next,
+   just goes left-to-right. Informed (AC-3+MRV): uses domain sizes and
+   constraint propagation to make intelligent choices.
+
+Q: How does the adversarial mode work?
+A: Two algorithms run in parallel threads on the same puzzle. First to
+   finish wins. Uses threading.Event for cooperative cancellation.
+
+Q: What is geometric cooling in SA?
+A: Temperature decreases by a fixed ratio each step: T_new = T * 0.99.
+   This ensures gradual transition from exploration to exploitation.
+
+Q: How many tests does the project have?
+A: 331 tests including unit tests and property-based tests (using Hypothesis
+   library). Property tests verify correctness across random inputs.
+
+================================================================================
+                         END OF VIVA GUIDE
+================================================================================
