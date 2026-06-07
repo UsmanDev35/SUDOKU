@@ -10,13 +10,16 @@ from sudoku_solver_evaluator.models.protocols import SolverProtocol
 class ForwardCheckingSolver(SolverProtocol):
 
     def __init__(self) -> None:
+        # Initialize solver display name.
         self._name = 'Forward Checking'
 
     @property
     def name(self) -> str:
+        # Return the solver's display name.
         return self._name
 
     def _get_peers(self, row: int, col: int) -> list[tuple[int, int]]:
+        # Return list of peer coordinates (row/col/box) for the given cell.
         peers: set[tuple[int, int]] = set()
         for c in range(9):
             if c != col:
@@ -33,6 +36,7 @@ class ForwardCheckingSolver(SolverProtocol):
         return list(peers)
 
     def _initialize_domains(self, grid: Grid) -> dict[tuple[int, int], set[int]]:
+        # Initialize domains for each cell based on current assignments.
         domains: dict[tuple[int, int], set[int]] = {}
         for r in range(9):
             for c in range(9):
@@ -60,6 +64,7 @@ class ForwardCheckingSolver(SolverProtocol):
         return domains
 
     def _forward_check(self, grid: Grid, domains: dict[tuple[int, int], set[int]], row: int, col: int, value: int) -> bool:
+        # Remove `value` from peers' domains and return False if any domain empties.
         peers = self._get_peers(row, col)
         for pr, pc in peers:
             if grid.get_cell(pr, pc).value is None:
@@ -69,6 +74,7 @@ class ForwardCheckingSolver(SolverProtocol):
         return True
 
     def _find_hidden_single_in_unit(self, grid: Grid, domains: dict[tuple[int, int], set[int]], unit_cells: list[tuple[int, int]]) -> Optional[tuple[int, int, int]]:
+        # Find a hidden single in a unit; return its coordinates and value if found.
         for value in range(1, 10):
             assigned_in_unit = False
             for r, c in unit_cells:
@@ -87,6 +93,7 @@ class ForwardCheckingSolver(SolverProtocol):
         return None
 
     def _propagate(self, grid: Grid, domains: dict[tuple[int, int], set[int]], states_explored: list[int], steps: Optional[list[StepEvent]], backtracks_count: list[int]) -> bool:
+        # Propagate assignments and hidden singles until no further changes occur.
         changed = True
         while changed:
             changed = False
@@ -155,6 +162,7 @@ class ForwardCheckingSolver(SolverProtocol):
         return True
 
     def _select_mrv(self, grid: Grid, domains: dict[tuple[int, int], set[int]]) -> Optional[tuple[int, int]]:
+        # Select the unassigned variable with minimum remaining values (MRV heuristic).
         best: Optional[tuple[int, int]] = None
         best_size = 10
         for r in range(9):
@@ -167,11 +175,13 @@ class ForwardCheckingSolver(SolverProtocol):
         return best
 
     def _save_state(self, grid: Grid, domains: dict[tuple[int, int], set[int]]) -> tuple[list[list[Optional[int]]], dict[tuple[int, int], set[int]]]:
+        # Save a lightweight snapshot of grid values and domains for backtracking.
         grid_values = [[grid.get_cell(r, c).value for c in range(9)] for r in range(9)]
         domains_copy = {k: set(v) for k, v in domains.items()}
         return (grid_values, domains_copy)
 
     def _restore_state(self, grid: Grid, domains: dict[tuple[int, int], set[int]], saved_values: list[list[Optional[int]]], saved_domains: dict[tuple[int, int], set[int]]) -> None:
+        # Restore a previously saved snapshot of values and domains.
         for r in range(9):
             for c in range(9):
                 val = saved_values[r][c]
@@ -183,6 +193,7 @@ class ForwardCheckingSolver(SolverProtocol):
         domains.update({k: set(v) for k, v in saved_domains.items()})
 
     def solve(self, grid: Grid, timeout: float=60.0) -> SolveResult:
+        # Solve using forward checking with propagation and MRV-guided search.
         start_time = time.monotonic()
         working_grid = grid.copy()
         if not is_grid_valid(working_grid):
@@ -213,6 +224,7 @@ class ForwardCheckingSolver(SolverProtocol):
             return SolveResult(solver_type=SolverType.FORWARD_CHECKING, status=SolveStatus.UNSOLVABLE, solved_grid=None, time_ms=elapsed_ms, states_explored=states_explored[0], backtracks=backtracks_count[0])
 
     def _search(self, grid: Grid, domains: dict[tuple[int, int], set[int]], states_explored: list[int], backtracks_count: list[int], start_time: float, timeout: float, steps: Optional[list[StepEvent]]) -> object:
+        # Recursive search using forward checking, propagation, and backtracking.
         if time.monotonic() - start_time >= timeout:
             return 'timeout'
         if grid.is_complete():
@@ -249,6 +261,7 @@ class ForwardCheckingSolver(SolverProtocol):
         return False
 
     def solve_stepwise(self, grid: Grid, timeout: float=60.0) -> Generator[StepEvent, None, SolveResult]:
+        # Solve while yielding step events for visualization of propagation and decisions.
         start_time = time.monotonic()
         working_grid = grid.copy()
         if not is_grid_valid(working_grid):

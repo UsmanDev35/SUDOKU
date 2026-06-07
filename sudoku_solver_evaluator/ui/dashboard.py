@@ -12,6 +12,7 @@ _BAR_HALF = '▌'
 _BAR_MAX_WIDTH = 40
 
 def render_comparison_table(comparison: ComparisonTable, console: Optional[Console]=None) -> None:
+    # Render a comparison table showing solver performance for a single puzzle.
     if console is None:
         console = Console()
     table = Table(title=f'Performance Comparison — Puzzle: {comparison.puzzle_id}', caption=f'Difficulty: {comparison.difficulty.value.capitalize()}', show_header=True, header_style='bold cyan')
@@ -43,6 +44,7 @@ def render_comparison_table(comparison: ComparisonTable, console: Optional[Conso
     console.print()
 
 def render_aggregate_table(aggregate: AggregateStats, console: Optional[Console]=None) -> None:
+    # Render aggregate statistics table for a difficulty level.
     if console is None:
         console = Console()
     difficulty_name = aggregate.difficulty.value.capitalize()
@@ -84,6 +86,7 @@ def render_aggregate_table(aggregate: AggregateStats, console: Optional[Console]
     console.print()
 
 def render_performance_chart(results: dict[SolverType, SolveResult], metric: str='states_explored', console: Optional[Console]=None) -> None:
+    # Render a simple horizontal bar chart for the given performance metric.
     if console is None:
         console = Console()
     if not results:
@@ -121,6 +124,7 @@ def render_performance_chart(results: dict[SolverType, SolveResult], metric: str
     console.print()
 
 def render_grouped_by_difficulty(comparisons: dict[DifficultyLevel, list[ComparisonTable]], console: Optional[Console]=None) -> None:
+    # Render comparison tables grouped by puzzle difficulty.
     if console is None:
         console = Console()
     for difficulty in DifficultyLevel:
@@ -133,6 +137,7 @@ def render_grouped_by_difficulty(comparisons: dict[DifficultyLevel, list[Compari
             render_comparison_table(comparison, console=console)
 
 def render_full_dashboard(comparisons: list[ComparisonTable], aggregates: dict[DifficultyLevel, AggregateStats], console: Optional[Console]=None) -> None:
+    # Render the full dashboard including grouped comparisons and aggregate stats.
     if console is None:
         console = Console()
     console.print()
@@ -155,6 +160,7 @@ def render_full_dashboard(comparisons: list[ComparisonTable], aggregates: dict[D
             render_performance_chart(last_comparison.results, metric='time_ms', console=console)
 
 def _format_metric(value: int, best_value: int) -> Text:
+    # Format a numeric metric and style it if it is the best value.
     text = Text(f'{value:,}')
     if value == best_value:
         text.stylize('bold green')

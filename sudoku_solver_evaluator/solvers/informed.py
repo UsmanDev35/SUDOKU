@@ -25,6 +25,7 @@ for _r in range(9):
         _PEERS[_r, _c] = list(peers)
 
 def _initialize_domains(grid: Grid) -> dict[tuple[int, int], set[int]]:
+    # Initialize possible value domains for every cell based on current assignments.
     domains: dict[tuple[int, int], set[int]] = {}
     for r in range(9):
         for c in range(9):
@@ -41,6 +42,7 @@ def _initialize_domains(grid: Grid) -> dict[tuple[int, int], set[int]]:
     return domains
 
 def _get_all_arcs() -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    # Return all constraint arcs between cells for AC-3 propagation.
     arcs = []
     for cell, peers in _PEERS.items():
         for peer in peers:
@@ -48,12 +50,14 @@ def _get_all_arcs() -> list[tuple[tuple[int, int], tuple[int, int]]]:
     return arcs
 
 def _get_affected_arcs(cell: tuple[int, int]) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    # Return arcs that are affected when the given cell's domain changes.
     arcs = []
     for peer in _PEERS[cell]:
         arcs.append((peer, cell))
     return arcs
 
 def _ac3(domains: dict[tuple[int, int], set[int]], initial_arcs: Optional[list[tuple[tuple[int, int], tuple[int, int]]]]=None, propagation_events: Optional[list[tuple[int, int]]]=None) -> bool:
+    # Enforce arc consistency (AC-3) on domains; return False if a domain is emptied.
     if initial_arcs is None:
         queue = deque(_get_all_arcs())
     else:
@@ -71,6 +75,7 @@ def _ac3(domains: dict[tuple[int, int], set[int]], initial_arcs: Optional[list[t
     return True
 
 def _revise(domains: dict[tuple[int, int], set[int]], xi: tuple[int, int], xj: tuple[int, int]) -> bool:
+    # Revise domain of xi by removing values that have no supporting value in xj.
     revised = False
     to_remove = []
     for v in domains[xi]:
@@ -87,6 +92,7 @@ def _revise(domains: dict[tuple[int, int], set[int]], xi: tuple[int, int], xj: t
     return revised
 
 def _select_variable(domains: dict[tuple[int, int], set[int]], assigned: set[tuple[int, int]]) -> tuple[int, int]:
+    # Select the next variable to assign using MRV, degree, and position tie-breakers.
     best_cell: Optional[tuple[int, int]] = None
     best_domain_size = float('inf')
     best_degree = -1
@@ -108,18 +114,22 @@ def _select_variable(domains: dict[tuple[int, int], set[int]], assigned: set[tup
     return best_cell
 
 def _copy_domains(domains: dict[tuple[int, int], set[int]]) -> dict[tuple[int, int], set[int]]:
+    # Return a deep copy of the domains mapping.
     return {cell: set(domain) for cell, domain in domains.items()}
 
 class InformedSolver(SolverProtocol):
 
     def __init__(self) -> None:
+        # Initialize solver with a human-readable name.
         self._name = 'Informed Search (AC-3 + MRV)'
 
     @property
     def name(self) -> str:
+        # Return the solver's display name.
         return self._name
 
     def solve(self, grid: Grid, timeout: float=60.0) -> SolveResult:
+        # Solve the grid using AC-3 propagation and backtracking with MRV.
         start_time = time.monotonic()
         working_grid = grid.copy()
         if not is_grid_valid(working_grid):
@@ -153,6 +163,7 @@ class InformedSolver(SolverProtocol):
             return SolveResult(solver_type=SolverType.INFORMED, status=SolveStatus.UNSOLVABLE, solved_grid=None, time_ms=elapsed_ms, states_explored=metrics[0], backtracks=metrics[1])
 
     def _assign_singletons(self, grid: Grid, domains: dict[tuple[int, int], set[int]], assigned: set[tuple[int, int]]) -> None:
+        # Assign cells that have only one possible value (singletons) to the grid.
         for cell, domain in domains.items():
             if cell not in assigned and len(domain) == 1:
                 value = next(iter(domain))
@@ -160,6 +171,7 @@ class InformedSolver(SolverProtocol):
                 assigned.add(cell)
 
     def _backtrack(self, grid: Grid, domains: dict[tuple[int, int], set[int]], assigned: set[tuple[int, int]], metrics: list[int], start_time: float, timeout: float) -> object:
+        # Recursive backtracking search using current domains and variable ordering.
         if time.monotonic() - start_time >= timeout:
             return 'timeout'
         if len(assigned) == 81:
@@ -209,6 +221,7 @@ class InformedSolver(SolverProtocol):
         return False
 
     def solve_stepwise(self, grid: Grid, timeout: float=60.0) -> Generator[StepEvent, None, SolveResult]:
+        # Solve the grid but yield step events for visualization instead of returning immediately.
         start_time = time.monotonic()
         working_grid = grid.copy()
         if not is_grid_valid(working_grid):
@@ -245,6 +258,7 @@ class InformedSolver(SolverProtocol):
             return SolveResult(solver_type=SolverType.INFORMED, status=SolveStatus.UNSOLVABLE, solved_grid=None, time_ms=elapsed_ms, states_explored=metrics[0], backtracks=metrics[1])
 
     def _backtrack_stepwise(self, grid: Grid, domains: dict[tuple[int, int], set[int]], assigned: set[tuple[int, int]], metrics: list[int], steps: list[StepEvent], start_time: float, timeout: float) -> object:
+        # Backtracking search that records `StepEvent`s for each assign/backtrack action.
         if time.monotonic() - start_time >= timeout:
             return 'timeout'
         if len(assigned) == 81:

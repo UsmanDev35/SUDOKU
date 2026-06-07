@@ -18,6 +18,7 @@ SOLVER_NAMES = {SolverType.BACKTRACKING: 'Backtracking', SolverType.INFORMED: 'I
 class SudokuGUI:
 
     def __init__(self, root: tk.Tk) -> None:
+        # Initialize GUI state, widgets, and helper components.
         self.root = root
         self.root.title('Sudoku Solver & Evaluator')
         self.root.resizable(False, False)
@@ -36,6 +37,7 @@ class SudokuGUI:
         self._build_ui()
 
     def _build_ui(self) -> None:
+        # Construct and layout the main UI panels and controls.
         main_frame = ttk.Frame(self.root, padding=10)
         main_frame.grid(row=0, column=0, sticky='nsew')
         self._build_grid_panel(main_frame)
@@ -43,6 +45,7 @@ class SudokuGUI:
         self._build_status_bar()
 
     def _build_grid_panel(self, parent: ttk.Frame) -> None:
+        # Create the canvas panel where the Sudoku grid is drawn.
         grid_frame = ttk.LabelFrame(parent, text='Sudoku Grid', padding=5)
         grid_frame.grid(row=0, column=0, padx=(0, 10), sticky='n')
         self.canvas = tk.Canvas(grid_frame, width=GRID_SIZE + 4, height=GRID_SIZE + 4, bg='white', highlightthickness=0)
@@ -50,6 +53,7 @@ class SudokuGUI:
         self._draw_empty_grid()
 
     def _build_control_panel(self, parent: ttk.Frame) -> None:
+        # Create the controls panel with buttons, sliders, and result area.
         control_frame = ttk.Frame(parent)
         control_frame.grid(row=0, column=1, sticky='n')
         diff_frame = ttk.LabelFrame(control_frame, text='Difficulty', padding=5)
@@ -87,14 +91,17 @@ class SudokuGUI:
         self.results_text.pack(fill='both', expand=True)
 
     def _build_status_bar(self) -> None:
+        # Create a status bar at the bottom of the window.
         self.status_var = tk.StringVar(value='Ready')
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief='sunken', anchor='w', padding=(5, 2))
         status_bar.grid(row=1, column=0, sticky='ew')
 
     def _update_speed_label(self, *args) -> None:
+        # Update the displayed animation speed label when the slider changes.
         self.speed_label.config(text=f'{self.speed_var.get()}ms')
 
     def _draw_empty_grid(self) -> None:
+        # Clear and draw an empty Sudoku grid background on the canvas.
         self.canvas.delete('all')
         for box_row in range(3):
             for box_col in range(3):
@@ -111,6 +118,7 @@ class SudokuGUI:
             self.canvas.create_line(2, x, GRID_SIZE + 2, x, width=width)
 
     def _draw_grid(self, grid: Grid, solved_grid: Optional[Grid]=None, highlight_cell: Optional[tuple[int, int]]=None, highlight_color: str='lightgreen') -> None:
+        # Draw the current grid (and optional solved grid) onto the canvas.
         self._draw_empty_grid()
         display_grid = solved_grid if solved_grid else grid
         for row in range(9):
@@ -135,6 +143,7 @@ class SudokuGUI:
                     self.canvas.create_text(x, y, text=str(cell.value), fill=color, font=font)
 
     def _disable_buttons(self) -> None:
+        # Disable interactive buttons while background work is running.
         self.btn_generate.config(state='disabled')
         self.btn_solve.config(state='disabled')
         self.btn_animate.config(state='disabled')
@@ -142,6 +151,7 @@ class SudokuGUI:
         self.btn_race.config(state='disabled')
 
     def _enable_buttons(self) -> None:
+        # Re-enable interactive buttons after background work completes.
         self.btn_generate.config(state='normal')
         self.btn_solve.config(state='normal')
         self.btn_animate.config(state='normal')
@@ -150,6 +160,7 @@ class SudokuGUI:
         self.btn_stop.config(state='disabled')
 
     def _on_generate(self) -> None:
+        # Trigger puzzle generation in a background thread.
         self._disable_buttons()
         self.status_var.set('Generating...')
         self.current_solution = None
@@ -158,6 +169,7 @@ class SudokuGUI:
         difficulty = DifficultyLevel(diff_str)
 
         def generate():
+            # Background worker that runs the generation and posts the result.
             try:
                 puzzle = self.generator.generate(difficulty, timeout=60.0)
                 self.root.after(0, lambda: self._on_generate_done(puzzle))
@@ -166,6 +178,7 @@ class SudokuGUI:
         threading.Thread(target=generate, daemon=True).start()
 
     def _on_generate_done(self, puzzle: Grid) -> None:
+        # Handle completion of puzzle generation and update UI.
         self.current_puzzle = puzzle
         self._draw_grid(puzzle)
         filled = puzzle.count_filled()
@@ -173,11 +186,13 @@ class SudokuGUI:
         self._enable_buttons()
 
     def _on_generate_error(self) -> None:
+        # Handle generation timeout and notify the user.
         self.status_var.set('Generation timed out')
         self._enable_buttons()
         messagebox.showwarning('Timeout', 'Puzzle generation timed out. Try again.')
 
     def _on_solve(self) -> None:
+        # Trigger solver run in the background for the selected solver.
         if self.current_puzzle is None:
             messagebox.showinfo('No Puzzle', 'Generate a puzzle first.')
             return
@@ -186,11 +201,13 @@ class SudokuGUI:
         self.status_var.set(f'Solving with {SOLVER_NAMES[solver_type]}...')
 
         def solve():
+            # Background worker to run the solver and post the result.
             result = self.solver_manager.solve(self.current_puzzle, solver_type)
             self.root.after(0, lambda: self._on_solve_done(result))
         threading.Thread(target=solve, daemon=True).start()
 
     def _on_solve_done(self, result: SolveResult) -> None:
+        # Update the UI to reflect solver results when solving completes.
         if result.status == SolveStatus.SOLVED and result.solved_grid:
             self.current_solution = result.solved_grid
             self._draw_grid(self.current_puzzle, result.solved_grid)
@@ -204,6 +221,7 @@ class SudokuGUI:
         self._enable_buttons()
 
     def _on_animate(self) -> None:
+        # Collect step events from the solver and start an animation of the solution.
         if self.current_puzzle is None:
             messagebox.showinfo('No Puzzle', 'Generate a puzzle first.')
             return
@@ -214,6 +232,7 @@ class SudokuGUI:
         self.status_var.set(f'Animating {SOLVER_NAMES[solver_type]}...')
 
         def collect_steps():
+            # Background worker that consumes the solver's step generator.
             step_gen = self.solver_manager.solve_stepwise(self.current_puzzle, solver_type)
             events = []
             result = None
@@ -227,6 +246,7 @@ class SudokuGUI:
         threading.Thread(target=collect_steps, daemon=True).start()
 
     def _start_animation(self, events: list[StepEvent], result: SolveResult) -> None:
+        # Initialize animation state and begin stepping through collected events.
         self.step_events = events
         self.step_index = 0
         self._animation_result = result
@@ -235,6 +255,7 @@ class SudokuGUI:
         self._animate_step()
 
     def _animate_step(self) -> None:
+        # Advance one animation step, update grid and schedule the next step.
         if not self.animating or self.step_index >= len(self.step_events):
             self._on_animation_done()
             return
@@ -258,6 +279,7 @@ class SudokuGUI:
         self.animation_id = self.root.after(delay, self._animate_step)
 
     def _on_animation_done(self) -> None:
+        # Finalize animation and show final result or status.
         self.animating = False
         result = self._animation_result
         if result and result.status == SolveStatus.SOLVED and result.solved_grid:
@@ -268,6 +290,7 @@ class SudokuGUI:
         self._enable_buttons()
 
     def _on_stop(self) -> None:
+        # Stop any running animation and restore UI controls.
         self.animating = False
         if self.animation_id:
             self.root.after_cancel(self.animation_id)
@@ -276,6 +299,7 @@ class SudokuGUI:
         self._enable_buttons()
 
     def _on_run_all(self) -> None:
+        # Run all solvers on the current puzzle in a background thread.
         if self.current_puzzle is None:
             messagebox.showinfo('No Puzzle', 'Generate a puzzle first.')
             return
@@ -283,11 +307,13 @@ class SudokuGUI:
         self.status_var.set('Solving with all algorithms...')
 
         def solve_all():
+            # Background worker to run all solvers and post comparison results.
             results = self.solver_manager.solve_all(self.current_puzzle)
             self.root.after(0, lambda: self._on_run_all_done(results))
         threading.Thread(target=solve_all, daemon=True).start()
 
     def _on_run_all_done(self, results: dict[SolverType, SolveResult]) -> None:
+        # Display results from running all solvers and update the grid if available.
         self.results_text.delete('1.0', tk.END)
         self.results_text.insert('1.0', 'Algorithm Comparison:\n')
         self.results_text.insert(tk.END, '-' * 34 + '\n')
@@ -303,6 +329,7 @@ class SudokuGUI:
         self._enable_buttons()
 
     def _on_race(self) -> None:
+        # Show dialog to select two solvers and start an adversarial race.
         if self.current_puzzle is None:
             messagebox.showinfo('No Puzzle', 'Generate a puzzle first.')
             return
@@ -322,6 +349,7 @@ class SudokuGUI:
             ttk.Radiobutton(dialog, text=SOLVER_NAMES[st], variable=solver_b_var, value=st.value).grid(row=i + 1, column=1, sticky='w', padx=20)
 
         def start_race():
+            # Validate selection and initiate the race.
             a = SolverType(solver_a_var.get())
             b = SolverType(solver_b_var.get())
             if a == b:
@@ -332,16 +360,19 @@ class SudokuGUI:
         ttk.Button(dialog, text='Start Race', command=start_race).grid(row=len(solvers_list) + 1, column=0, columnspan=2, pady=10)
 
     def _run_race(self, solver_a: SolverType, solver_b: SolverType) -> None:
+        # Run an adversarial race between two solvers in the background.
         self._disable_buttons()
         self.status_var.set(f'Racing: {SOLVER_NAMES[solver_a]} vs {SOLVER_NAMES[solver_b]}...')
 
         def race():
+            # Background worker that runs the race controller and posts results.
             controller = RaceController(solver_manager=self.solver_manager)
             result = controller.start_race(grid=self.current_puzzle, solver_a=solver_a, solver_b=solver_b, timeout=60.0)
             self.root.after(0, lambda: self._on_race_done(result))
         threading.Thread(target=race, daemon=True).start()
 
     def _on_race_done(self, race_result) -> None:
+        # Present race results and notify the user of the winner or tie.
         res_a = race_result.solver_a_result
         res_b = race_result.solver_b_result
         self.results_text.delete('1.0', tk.END)
@@ -365,6 +396,7 @@ class SudokuGUI:
         self._enable_buttons()
 
 def run_gui() -> None:
+    # Launch the Tkinter GUI application.
     root = tk.Tk()
     app = SudokuGUI(root)
     root.mainloop()

@@ -6,11 +6,13 @@ from sudoku_solver_evaluator.models.protocols import PuzzleGeneratorProtocol
 _DIFFICULTY_RANGES: dict[DifficultyLevel, tuple[int, int]] = {DifficultyLevel.EASY: (36, 45), DifficultyLevel.MEDIUM: (27, 35), DifficultyLevel.HARD: (22, 26), DifficultyLevel.EXPERT: (17, 21)}
 
 def _box_index(row: int, col: int) -> int:
+    # Compute the 3x3 box index for the given (row, col) position.
     return row // 3 * 3 + col // 3
 
 class PuzzleGenerator(PuzzleGeneratorProtocol):
 
     def generate(self, difficulty: DifficultyLevel, timeout: float=60.0) -> Grid:
+        # Generate a puzzle Grid for the requested difficulty within an optional timeout.
         if not isinstance(difficulty, DifficultyLevel):
             raise ValueError(f'Invalid difficulty: {difficulty!r}. Must be a DifficultyLevel enum value (EASY, MEDIUM, HARD, or EXPERT).')
         timeout_at = time.monotonic() + timeout
@@ -27,6 +29,7 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
                 return self._board_to_grid(puzzle_board)
 
     def _generate_complete_board(self, timeout_at: float) -> list[int]:
+        # Produce a fully-filled valid Sudoku board within the time limit.
         board = [0] * 81
         row_used: list[set[int]] = [set() for _ in range(9)]
         col_used: list[set[int]] = [set() for _ in range(9)]
@@ -36,6 +39,7 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
         return board
 
     def _fill_board(self, board: list[int], position: int, row_used: list[set[int]], col_used: list[set[int]], box_used: list[set[int]], timeout_at: float) -> bool:
+        # Recursively fill the board using backtracking to create a complete solution.
         if position % 9 == 0 and time.monotonic() > timeout_at:
             raise TimeoutError('Puzzle generation failed due to timeout: could not complete grid generation within the time limit.')
         if position == 81:
@@ -60,11 +64,13 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
         return False
 
     def _remove_cells(self, board: list[int], target_filled: int, timeout_at: float) -> list[int]:
+        # Remove cells from a full board to create a puzzle with approximately target_filled cells.
         puzzle = board[:]
         current_filled = 81
         positions = list(range(81))
 
         def _constraint_score(pos: int) -> int:
+            # Heuristic score counting filled neighbors for prioritizing removals.
             row = pos // 9
             col = pos % 9
             box_start_r = row // 3 * 3
@@ -101,6 +107,7 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
         return puzzle
 
     def _has_unique_solution(self, puzzle: list[int]) -> bool:
+        # Check whether the puzzle has exactly one valid solution.
         row_mask = [0] * 9
         col_mask = [0] * 9
         box_mask = [0] * 9
@@ -122,6 +129,7 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
         return count[0] == 1
 
     def _count_solutions_bitmask(self, empty_cells: list[int], index: int, row_mask: list[int], col_mask: list[int], box_mask: list[int], count: list[int]) -> None:
+        # Count solutions using bitmask backtracking; stops after finding two or more.
         if count[0] >= 2:
             return
         if index == len(empty_cells):
@@ -166,6 +174,7 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
         empty_cells[index], empty_cells[best_idx] = (empty_cells[best_idx], empty_cells[index])
 
     def _count_solutions(self, grid: Grid, limit: int=2) -> int:
+        # Count solutions for a given grid up to a specified limit (default 2).
         board = [0] * 81
         for r in range(9):
             for c in range(9):
@@ -194,6 +203,7 @@ class PuzzleGenerator(PuzzleGeneratorProtocol):
 
     @staticmethod
     def _board_to_grid(board: list[int]) -> Grid:
+        # Convert a flat board list into a `Grid` of `Cell` objects.
         cells = []
         for r in range(9):
             row_cells = []

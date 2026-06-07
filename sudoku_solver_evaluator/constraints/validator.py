@@ -1,6 +1,7 @@
 from sudoku_solver_evaluator.models.grid import Grid
 
 def has_row_conflict(grid: Grid, row: int, col: int, value: int) -> bool:
+    # Check whether `value` already exists in the given row (excluding the target column).
     for c in range(9):
         if c == col:
             continue
@@ -10,6 +11,7 @@ def has_row_conflict(grid: Grid, row: int, col: int, value: int) -> bool:
     return False
 
 def has_col_conflict(grid: Grid, row: int, col: int, value: int) -> bool:
+    # Check whether `value` already exists in the given column (excluding the target row).
     for r in range(9):
         if r == row:
             continue
@@ -19,6 +21,7 @@ def has_col_conflict(grid: Grid, row: int, col: int, value: int) -> bool:
     return False
 
 def has_box_conflict(grid: Grid, row: int, col: int, value: int) -> bool:
+    # Check whether `value` already exists in the 3x3 box containing (row, col).
     box_start_row = row // 3 * 3
     box_start_col = col // 3 * 3
     for r in range(box_start_row, box_start_row + 3):
@@ -31,6 +34,7 @@ def has_box_conflict(grid: Grid, row: int, col: int, value: int) -> bool:
     return False
 
 def is_valid_assignment(grid: Grid, row: int, col: int, value: int) -> bool:
+    # Return True if placing `value` at (row, col) does not violate any row/col/box constraints.
     if has_row_conflict(grid, row, col, value):
         return False
     if has_col_conflict(grid, row, col, value):
@@ -40,6 +44,7 @@ def is_valid_assignment(grid: Grid, row: int, col: int, value: int) -> bool:
     return True
 
 def get_conflicts(grid: Grid, row: int, col: int) -> list[tuple[int, int]]:
+    # Return a list of coordinates that conflict with the value at (row, col).
     cell = grid.get_cell(row, col)
     if cell.value is None:
         return []
@@ -70,6 +75,7 @@ def get_conflicts(grid: Grid, row: int, col: int) -> list[tuple[int, int]]:
     return conflicts
 
 def is_grid_valid(grid: Grid) -> bool:
+    # Validate the entire grid for duplicate values in rows, columns, and 3x3 boxes.
     for row in range(9):
         values = []
         for col in range(9):

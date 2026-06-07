@@ -21,6 +21,7 @@ class ExportRow:
     optimality_rank: int
 
 def compute_optimality_ranks(rows: list[ExportRow]) -> list[ExportRow]:
+    # Compute optimality ranks for each puzzle grouping based on states explored.
     if not rows:
         return []
     groups: dict[str, list[ExportRow]] = defaultdict(list)
@@ -39,6 +40,7 @@ def compute_optimality_ranks(rows: list[ExportRow]) -> list[ExportRow]:
     return result
 
 def export_csv(filepath: str, rows: list[ExportRow]) -> None:
+    # Write a list of ExportRow objects to a CSV file at `filepath`.
     try:
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
@@ -49,6 +51,7 @@ def export_csv(filepath: str, rows: list[ExportRow]) -> None:
         raise ExportError(f'Failed to write CSV to {filepath}: {e}') from e
 
 def read_csv(filepath: str) -> list[ExportRow]:
+    # Read ExportRow records from a CSV file and return them as objects.
     try:
         rows: list[ExportRow] = []
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -60,6 +63,7 @@ def read_csv(filepath: str) -> list[ExportRow]:
         raise ExportError(f'Failed to read CSV from {filepath}: {e}') from e
 
 def export_results_csv(results: dict[str, dict[SolverType, SolveResult]], difficulty_map: dict[str, DifficultyLevel], filepath: str) -> None:
+    # Convert solver results into ExportRow objects, rank them, and write to CSV.
     rows: list[ExportRow] = []
     for puzzle_id, solver_results in results.items():
         difficulty = difficulty_map.get(puzzle_id, DifficultyLevel.EASY)

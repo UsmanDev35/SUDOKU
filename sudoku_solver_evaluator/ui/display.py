@@ -11,6 +11,7 @@ STYLE_HIGHLIGHT_SWAP = 'bold magenta on purple4'
 EMPTY_PLACEHOLDER = '.'
 
 def render_grid(grid: Grid, highlight_cell: Optional[tuple[int, int]]=None, highlight_swap: Optional[tuple[int, int]]=None) -> Table:
+    # Create a rich Table representation of the Sudoku grid with optional highlights.
     table = Table(title='Sudoku', show_header=False, show_lines=True, border_style='bright_blue', pad_edge=True, padding=(0, 1))
     for col_idx in range(9):
         table.add_column(justify='center', width=3, no_wrap=True)
@@ -25,6 +26,7 @@ def render_grid(grid: Grid, highlight_cell: Optional[tuple[int, int]]=None, high
     return table
 
 def _format_cell(value: Optional[int], is_fixed: bool, row: int, col: int, highlight_cell: Optional[tuple[int, int]], highlight_swap: Optional[tuple[int, int]]) -> Text:
+    # Format a single cell's display text and style based on its state.
     is_active = highlight_cell is not None and (row, col) == highlight_cell
     is_swap = highlight_swap is not None and (row, col) == highlight_swap
     if value is None:
@@ -44,6 +46,7 @@ def _format_cell(value: Optional[int], is_fixed: bool, row: int, col: int, highl
     return Text(display, style=style)
 
 def print_grid(grid: Grid, highlight_cell: Optional[tuple[int, int]]=None, highlight_swap: Optional[tuple[int, int]]=None, console: Optional[Console]=None) -> None:
+    # Print the rendered grid to the provided console (or a default Console).
     if console is None:
         console = Console()
     table = render_grid(grid, highlight_cell=highlight_cell, highlight_swap=highlight_swap)

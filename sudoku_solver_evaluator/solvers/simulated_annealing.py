@@ -10,6 +10,7 @@ from sudoku_solver_evaluator.models.protocols import SolverProtocol
 class SimulatedAnnealingSolver(SolverProtocol):
 
     def __init__(self, initial_temp: float=1.0, cooling_rate: float=0.99, min_temp: float=0.001, max_restarts: int=10) -> None:
+        # Configure simulated annealing parameters (temperatures, cooling, restarts).
         self._initial_temp = initial_temp
         self._cooling_rate = cooling_rate
         self._min_temp = min_temp
@@ -17,9 +18,11 @@ class SimulatedAnnealingSolver(SolverProtocol):
 
     @property
     def name(self) -> str:
+        # Return the solver's display name.
         return 'Simulated Annealing'
 
     def _initialize_grid(self, grid: Grid) -> Grid:
+        # Fill non-fixed cells in each box with a random permutation of missing values.
         for box_index in range(9):
             box_cells = grid.get_box(box_index)
             fixed_values = set()
@@ -36,6 +39,7 @@ class SimulatedAnnealingSolver(SolverProtocol):
         return grid
 
     def _compute_cost(self, grid: Grid) -> int:
+        # Compute the total number of row/column conflicts (lower is better).
         cost = 0
         for row in range(9):
             value_counts: dict[int, int] = {}
@@ -58,6 +62,7 @@ class SimulatedAnnealingSolver(SolverProtocol):
         return cost
 
     def _compute_cost_delta(self, grid: Grid, row1: int, col1: int, row2: int, col2: int) -> int:
+        # Compute change in cost if values at two positions are swapped.
         val1 = grid.get_cell(row1, col1).value
         val2 = grid.get_cell(row2, col2).value
         if val1 == val2:
@@ -87,6 +92,7 @@ class SimulatedAnnealingSolver(SolverProtocol):
         return cost_after - cost_before
 
     def _row_cost(self, grid: Grid, row: int) -> int:
+        # Compute cost (number of duplicate entries) for a single row.
         value_counts: dict[int, int] = {}
         for col in range(9):
             val = grid.get_cell(row, col).value
@@ -99,6 +105,7 @@ class SimulatedAnnealingSolver(SolverProtocol):
         return cost
 
     def _col_cost(self, grid: Grid, col: int) -> int:
+        # Compute cost (number of duplicate entries) for a single column.
         value_counts: dict[int, int] = {}
         for row in range(9):
             val = grid.get_cell(row, col).value
@@ -111,10 +118,12 @@ class SimulatedAnnealingSolver(SolverProtocol):
         return cost
 
     def _get_non_fixed_cells_in_box(self, grid: Grid, box_index: int) -> list[tuple[int, int]]:
+        # Return coordinates of non-fixed cells inside a given 3x3 box.
         box_cells = grid.get_box(box_index)
         return [(cell.row, cell.col) for cell in box_cells if not cell.is_fixed]
 
     def solve(self, grid: Grid, timeout: float=60.0) -> SolveResult:
+        # Perform simulated annealing local search to try to find a complete solution.
         start_time = time.monotonic()
         states_explored = 0
         restarts = 0
@@ -183,6 +192,7 @@ class SimulatedAnnealingSolver(SolverProtocol):
         return SolveResult(solver_type=SolverType.LOCAL_SEARCH, status=SolveStatus.FAILED, solved_grid=best_grid, time_ms=elapsed_ms, states_explored=states_explored, restarts=restarts, best_cost=best_cost)
 
     def solve_stepwise(self, grid: Grid, timeout: float=60.0) -> Generator[StepEvent, None, SolveResult]:
+        # Run simulated annealing but yield `StepEvent`s for swaps as they occur.
         start_time = time.monotonic()
         states_explored = 0
         restarts = 0

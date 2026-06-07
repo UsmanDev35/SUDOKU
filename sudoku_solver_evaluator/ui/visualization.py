@@ -16,11 +16,13 @@ MIN_DELAY_MS = 100
 MAX_DELAY_MS = 2000
 
 def clamp_delay(delay_ms: int) -> int:
+    # Clamp a requested delay between the allowed min and max values.
     return max(MIN_DELAY_MS, min(MAX_DELAY_MS, delay_ms))
 
 class VisualizationController:
 
     def __init__(self, grid: Grid, delay_ms: int=DEFAULT_DELAY_MS) -> None:
+        # Initialize visualization controller state and copy of the grid.
         self.delay_ms: int = clamp_delay(delay_ms)
         self.grid: Grid = grid.copy()
         self.states_explored: int = 0
@@ -36,9 +38,11 @@ class VisualizationController:
         self._input_thread: Optional[threading.Thread] = None
 
     def set_delay(self, delay_ms: int) -> None:
+        # Update the visualization delay, ensuring it stays within bounds.
         self.delay_ms = clamp_delay(delay_ms)
 
     def run(self, step_generator: Generator[StepEvent, None, SolveResult]) -> SolveResult:
+        # Run the visualization loop, consuming step events until completion.
         self.is_running = True
         self.is_paused = False
         self.is_skipping = False
@@ -72,16 +76,20 @@ class VisualizationController:
         return result
 
     def pause(self) -> None:
+        # Pause the visualization playback.
         self.is_paused = True
 
     def resume(self) -> None:
+        # Resume the visualization playback.
         self.is_paused = False
 
     def skip_to_end(self) -> None:
+        # Skip remaining steps and fast-forward to the end of visualization.
         self.is_skipping = True
         self.is_paused = False
 
     def _process_step(self, event: StepEvent) -> None:
+        # Update controller state based on a single StepEvent.
         self.states_explored = event.states_explored
         self.backtracks = event.backtracks
         self._highlight_cells = []
@@ -116,6 +124,7 @@ class VisualizationController:
             self._step_label = f'PROPAGATE ({event.row},{event.col})'
 
     def _render_display(self) -> Panel:
+        # Build and return the Panel containing the current grid and status.
         grid_table = self._render_grid()
         status_parts = []
         if self._step_label:
@@ -150,6 +159,7 @@ class VisualizationController:
         return Panel(panel_content, title=title, border_style='blue')
 
     def _render_grid_text(self) -> Text:
+        # Render a plain-text representation of the grid for the panel.
         text = Text()
         text.append('     1  2  3   4  5  6   7  8  9\n', style='dim')
         text.append('   +' + '---' * 3 + '+' + '---' * 3 + '+' + '---' * 3 + '+\n', style='dim')
@@ -184,6 +194,7 @@ class VisualizationController:
         return text
 
     def _render_grid(self) -> Table:
+        # Render a rich Table version of the grid for Live display.
         table = Table(show_header=False, show_lines=True, padding=0)
         for _ in range(9):
             table.add_column(width=3, justify='center')
@@ -199,10 +210,12 @@ class VisualizationController:
         return table
 
     def _start_input_listener(self) -> None:
+        # Start a background thread that listens for keyboard input to control playback.
         self._input_thread = threading.Thread(target=self._input_loop, daemon=True, name='viz-input-listener')
         self._input_thread.start()
 
     def _input_loop(self) -> None:
+        # Platform-agnostic input loop dispatcher for handling key presses.
         try:
             if sys.platform == 'win32':
                 self._input_loop_windows()
@@ -212,6 +225,7 @@ class VisualizationController:
             pass
 
     def _input_loop_windows(self) -> None:
+        # Windows-specific non-blocking input loop using msvcrt.
         try:
             import msvcrt
             while self.is_running:
@@ -224,6 +238,7 @@ class VisualizationController:
             pass
 
     def _input_loop_unix(self) -> None:
+        # Unix-specific input loop using termios/select for non-blocking key reads.
         try:
             import select
             import termios
@@ -242,6 +257,7 @@ class VisualizationController:
             pass
 
     def _handle_key(self, key: str) -> None:
+        # Map single-character keys to control methods.
         if key == 'p':
             self.pause()
         elif key == 'r':
@@ -250,5 +266,6 @@ class VisualizationController:
             self.skip_to_end()
 
 def run_visualization(grid: Grid, step_generator: Generator[StepEvent, None, SolveResult], delay_ms: int=DEFAULT_DELAY_MS) -> SolveResult:
+    # Helper to create a controller and run visualization for a step generator.
     controller = VisualizationController(grid=grid, delay_ms=delay_ms)
     return controller.run(step_generator)

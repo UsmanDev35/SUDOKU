@@ -10,6 +10,7 @@ from sudoku_solver_evaluator.solvers import SolverManager
 class RaceController:
 
     def __init__(self, solver_manager: Optional[SolverManager]=None) -> None:
+        # Initialize race controller state and threading primitives.
         self._solver_manager = solver_manager or SolverManager()
         self._cancel_event = threading.Event()
         self._lock = threading.Lock()
@@ -25,6 +26,7 @@ class RaceController:
         self._exception_b: Optional[Exception] = None
 
     def start_race(self, grid: Grid, solver_a: SolverType, solver_b: SolverType, timeout: float=60.0) -> RaceResult:
+        # Start a timed race between two solvers on the same grid and return the RaceResult.
         if solver_a == solver_b:
             raise ValueError(f"Adversarial mode requires two distinct solvers, got '{solver_a.value}' for both.")
         self._cancel_event.clear()
@@ -61,16 +63,19 @@ class RaceController:
         return RaceResult(solver_a_type=solver_a, solver_b_type=solver_b, solver_a_result=self._result_a, solver_b_result=self._result_b, winner=winner, time_difference_ms=time_difference_ms)
 
     def get_live_status(self) -> tuple[RaceStatus, RaceStatus]:
+        # Return the current live status snapshots for both racers.
         with self._lock:
             if self._status_a is None or self._status_b is None:
                 raise RuntimeError('No race is currently in progress.')
             return (self._status_a, self._status_b)
 
     def stop(self) -> None:
+        # Signal cancellation and mark the race as not running.
         self._cancel_event.set()
         self._is_running = False
 
     def _run_solver(self, grid: Grid, solver_type: SolverType, timeout: float, identifier: str) -> None:
+        # Run a solver in a thread, capture its result/status, and set cancellation on success.
         try:
             result = self._solver_manager.solve(grid, solver_type, timeout=timeout)
             completion_time = time.monotonic()
@@ -101,6 +106,7 @@ class RaceController:
                         self._status_b = RaceStatus(solver_type=solver_type, states_explored=self._status_b.states_explored, elapsed_ms=elapsed_ms, is_complete=True)
 
     def _monitor_race(self, thread_a: threading.Thread, thread_b: threading.Thread, timeout: float) -> None:
+        # Monitor running race threads, update statuses, and enforce timeout/cancellation.
         poll_interval = 0.1
         while True:
             elapsed = time.monotonic() - self._start_time
@@ -124,6 +130,7 @@ class RaceController:
             time.sleep(poll_interval)
 
     def _determine_winner(self, solver_a: SolverType, solver_b: SolverType) -> Optional[SolverType]:
+        # Decide which solver (if any) won based on success and timing thresholds.
         result_a = self._result_a
         result_b = self._result_b
         if result_a is None or result_b is None:

@@ -19,21 +19,27 @@ class Grid:
     cells: list[list[Cell]]
 
     def get_cell(self, row: int, col: int) -> Cell:
+        # Return the Cell object at the given row and column.
         return self.cells[row][col]
 
     def set_value(self, row: int, col: int, value: int) -> None:
+        # Set the numeric value for a cell.
         self.cells[row][col].value = value
 
     def clear_value(self, row: int, col: int) -> None:
+        # Clear the value of a cell (make it unassigned).
         self.cells[row][col].value = None
 
     def get_row(self, row: int) -> list[Cell]:
+        # Return all Cell objects in the specified row.
         return self.cells[row]
 
     def get_col(self, col: int) -> list[Cell]:
+        # Return all Cell objects in the specified column.
         return [self.cells[row][col] for row in range(9)]
 
     def get_box(self, box_index: int) -> list[Cell]:
+        # Return the 3x3 box cells for the given box index.
         start_row = box_index // 3 * 3
         start_col = box_index % 3 * 3
         cells = []
@@ -43,6 +49,7 @@ class Grid:
         return cells
 
     def get_peers(self, row: int, col: int) -> list[Cell]:
+        # Return peer Cell objects that share row, column, or box with the cell.
         peers: set[tuple[int, int]] = set()
         for c in range(9):
             if c != col:
@@ -59,6 +66,7 @@ class Grid:
         return [self.cells[r][c] for r, c in peers]
 
     def get_empty_cells(self) -> list[Cell]:
+        # Return a list of Cell objects that are not yet assigned.
         empty = []
         for row in self.cells:
             for cell in row:
@@ -67,6 +75,7 @@ class Grid:
         return empty
 
     def is_complete(self) -> bool:
+        # Return True if every cell in the grid has a value assigned.
         for row in self.cells:
             for cell in row:
                 if cell.value is None:
@@ -74,6 +83,7 @@ class Grid:
         return True
 
     def is_valid(self) -> bool:
+        # Validate all rows, columns, and boxes contain no duplicate non-empty values.
         for row in range(9):
             if not self._is_unit_valid(self.get_row(row)):
                 return False
@@ -86,10 +96,12 @@ class Grid:
         return True
 
     def _is_unit_valid(self, cells: list[Cell]) -> bool:
+        # Check that a unit (row/col/box) has no duplicate assigned values.
         values = [cell.value for cell in cells if cell.value is not None]
         return len(values) == len(set(values))
 
     def copy(self) -> 'Grid':
+        # Return a deep copy of the grid and its cells.
         new_cells = []
         for row in self.cells:
             new_row = []
@@ -100,6 +112,7 @@ class Grid:
         return Grid(cells=new_cells)
 
     def count_filled(self) -> int:
+        # Count how many cells in the grid are currently assigned.
         count = 0
         for row in self.cells:
             for cell in row:
@@ -109,6 +122,7 @@ class Grid:
 
     @classmethod
     def from_2d_list(cls, values: list[list[int]]) -> 'Grid':
+        # Construct a Grid object from a 2D list of integers (0 denotes empty).
         cells = []
         for row in range(9):
             cell_row = []
@@ -123,6 +137,7 @@ class Grid:
         return cls(cells=cells)
 
     def to_2d_list(self) -> list[list[int]]:
+        # Convert the Grid into a 2D list of integers using 0 for empty cells.
         result = []
         for row in self.cells:
             result.append([cell.value if cell.value is not None else 0 for cell in row])

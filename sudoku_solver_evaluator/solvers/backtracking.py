@@ -9,13 +9,16 @@ from sudoku_solver_evaluator.models.protocols import SolverProtocol
 class BacktrackingSolver(SolverProtocol):
 
     def __init__(self) -> None:
+        # Initialize solver display name.
         self._name = 'Backtracking Search'
 
     @property
     def name(self) -> str:
+        # Return the solver's display name.
         return self._name
 
     def solve(self, grid: Grid, timeout: float=60.0) -> SolveResult:
+        # Solve the grid using straightforward backtracking (iterative implementation).
         start_time = time.monotonic()
         working_grid = grid.copy()
         if not is_grid_valid(working_grid):
@@ -60,6 +63,7 @@ class BacktrackingSolver(SolverProtocol):
             return SolveResult(solver_type=SolverType.BACKTRACKING, status=SolveStatus.UNSOLVABLE, solved_grid=None, time_ms=elapsed_ms, states_explored=states_explored, backtracks=backtracks)
 
     def solve_stepwise(self, grid: Grid, timeout: float=60.0) -> Generator[StepEvent, None, SolveResult]:
+        # Solve while yielding `StepEvent`s for visualization of assignments/backtracks.
         start_time = time.monotonic()
         working_grid = grid.copy()
         if not is_grid_valid(working_grid):

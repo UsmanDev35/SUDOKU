@@ -6,6 +6,7 @@ from sudoku_solver_evaluator.solvers import SolverManager
 from sudoku_solver_evaluator.ui.cli import CLI
 
 def main() -> None:
+    # Entry point for CLI mode: prepare components and run the CLI.
     console = Console()
     generator = PuzzleGenerator()
     solver_manager = SolverManager()
