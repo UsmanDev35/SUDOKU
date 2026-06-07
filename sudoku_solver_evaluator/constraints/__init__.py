@@ -1,23 +1,2 @@
-"""Constraint validation utilities for Sudoku grids.
-
-Provides functions to check row, column, and box constraints,
-detect conflicts, and validate grid state.
-"""
-
-from sudoku_solver_evaluator.constraints.validator import (
-    has_box_conflict,
-    has_col_conflict,
-    has_row_conflict,
-    get_conflicts,
-    is_grid_valid,
-    is_valid_assignment,
-)
-
-__all__ = [
-    "has_box_conflict",
-    "has_col_conflict",
-    "has_row_conflict",
-    "get_conflicts",
-    "is_grid_valid",
-    "is_valid_assignment",
-]
+from sudoku_solver_evaluator.constraints.validator import has_box_conflict, has_col_conflict, has_row_conflict, get_conflicts, is_grid_valid, is_valid_assignment
+__all__ = ['has_box_conflict', 'has_col_conflict', 'has_row_conflict', 'get_conflicts', 'is_grid_valid', 'is_valid_assignment']
