@@ -1,10 +1,13 @@
 """Entry point for the AI-Powered Multi-Level Sudoku Solver and Evaluator.
 
 Initializes all components (PuzzleGenerator, SolverManager, PerformanceEvaluator)
-and starts the interactive CLI menu loop.
+and starts the interactive CLI menu loop. Supports --gui flag for Tkinter GUI.
 
 Run with: python -m sudoku_solver_evaluator.main
+         python -m sudoku_solver_evaluator.main --gui
 """
+
+import sys
 
 from rich.console import Console
 
@@ -43,4 +46,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--gui" in sys.argv:
+        from sudoku_solver_evaluator.gui import run_gui
+        run_gui()
+    else:
+        main()

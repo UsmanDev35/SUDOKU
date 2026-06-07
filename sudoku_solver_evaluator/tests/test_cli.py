@@ -214,16 +214,16 @@ class TestCLIDashboard:
 
 
 class TestCLIAdversarialMode:
-    """Test adversarial mode placeholder."""
+    """Test adversarial mode."""
 
-    @patch("builtins.input", side_effect=["5", "7"])
-    def test_adversarial_not_implemented(self, mock_input):
-        """CLI shows placeholder message for adversarial mode."""
+    @patch("builtins.input", side_effect=["5", "1", "1", "7"])
+    def test_adversarial_same_solver_error(self, mock_input):
+        """CLI adversarial mode shows error when same solver selected twice."""
         console = _make_console()
         cli = _make_cli(console)
         cli.run()
         output = console.file.getvalue()
-        assert "not yet implemented" in output
+        assert "two different solvers" in output
 
 
 class TestCLIExportCSV:

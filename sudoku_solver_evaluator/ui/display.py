@@ -24,7 +24,7 @@ STYLE_HIGHLIGHT = "bold yellow on dark_goldenrod"
 STYLE_HIGHLIGHT_SWAP = "bold magenta on purple4"
 
 # Placeholder for empty cells
-EMPTY_PLACEHOLDER = "·"
+EMPTY_PLACEHOLDER = "."
 
 
 def render_grid(

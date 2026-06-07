@@ -365,8 +365,7 @@ class InformedSolver(SolverProtocol):
 
         Works on a deep copy of the input grid to avoid mutating the original.
         Validates the initial grid for constraint violations before starting.
-        Uses an iterative backtracking approach with an explicit stack to avoid
-        Python recursion limits.
+        Uses recursive backtracking with AC-3 propagation after each assignment.
 
         Args:
             grid: The initial puzzle grid (not mutated).
@@ -430,6 +429,9 @@ class InformedSolver(SolverProtocol):
                 if working_grid.get_cell(r, c).value is not None:
                     assigned.add((r, c))
 
+        # Auto-assign all singleton domains from initial AC-3
+        self._assign_singletons(working_grid, domains, assigned)
+
         # If all cells are already assigned, puzzle is solved
         if len(assigned) == 81:
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
@@ -442,107 +444,146 @@ class InformedSolver(SolverProtocol):
                 backtracks=0,
             )
 
-        # Metrics counters (Requirement 3.8)
-        states_explored = 0
-        backtracks = 0
+        # Metrics counters
+        metrics = [0, 0]  # [states_explored, backtracks]
 
-        # Iterative backtracking with explicit stack
-        # Each stack frame: (cell, values_to_try, saved_domains)
-        # values_to_try is a list of values remaining to try for this cell
-        stack: list[tuple[tuple[int, int], list[int], dict[tuple[int, int], set[int]]]] = []
+        # Recursive backtracking search
+        result = self._backtrack(
+            working_grid, domains, assigned, metrics, start_time, timeout
+        )
 
-        # Select first variable and push initial frame
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+        if result == "timeout":
+            return SolveResult(
+                solver_type=SolverType.INFORMED,
+                status=SolveStatus.TIMEOUT,
+                solved_grid=None,
+                time_ms=elapsed_ms,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            )
+        elif result:
+            return SolveResult(
+                solver_type=SolverType.INFORMED,
+                status=SolveStatus.SOLVED,
+                solved_grid=working_grid,
+                time_ms=elapsed_ms,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            )
+        else:
+            return SolveResult(
+                solver_type=SolverType.INFORMED,
+                status=SolveStatus.UNSOLVABLE,
+                solved_grid=None,
+                time_ms=elapsed_ms,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            )
+
+    def _assign_singletons(
+        self,
+        grid: Grid,
+        domains: dict[tuple[int, int], set[int]],
+        assigned: set[tuple[int, int]],
+    ) -> None:
+        """Auto-assign all cells with singleton domains (forced by AC-3)."""
+        for cell, domain in domains.items():
+            if cell not in assigned and len(domain) == 1:
+                value = next(iter(domain))
+                grid.set_value(cell[0], cell[1], value)
+                assigned.add(cell)
+
+    def _backtrack(
+        self,
+        grid: Grid,
+        domains: dict[tuple[int, int], set[int]],
+        assigned: set[tuple[int, int]],
+        metrics: list[int],
+        start_time: float,
+        timeout: float,
+    ) -> object:
+        """Recursive backtracking with AC-3 propagation.
+
+        Returns True if solved, False if unsolvable, "timeout" if timed out.
+        """
+        # Check timeout
+        if time.monotonic() - start_time >= timeout:
+            return "timeout"
+
+        # Check if complete
+        if len(assigned) == 81:
+            return True
+
+        # Check for any empty domain among unassigned cells
+        for cell, domain in domains.items():
+            if cell not in assigned and not domain:
+                return False
+
+        # Select next variable using MRV + Degree (Requirement 3.2, 3.3)
         cell = _select_variable(domains, assigned)
         values_to_try = sorted(domains[cell])
-        stack.append((cell, values_to_try, _copy_domains(domains)))
 
-        while stack:
+        for value in values_to_try:
             # Check timeout
             if time.monotonic() - start_time >= timeout:
-                elapsed_ms = int((time.monotonic() - start_time) * 1000)
-                return SolveResult(
-                    solver_type=SolverType.INFORMED,
-                    status=SolveStatus.TIMEOUT,
-                    solved_grid=None,
-                    time_ms=elapsed_ms,
-                    states_explored=states_explored,
-                    backtracks=backtracks,
-                )
+                return "timeout"
 
-            cell, values_to_try, saved_domains = stack[-1]
+            # Save state before assignment
+            saved_domains = _copy_domains(domains)
 
-            if not values_to_try:
-                # No more values to try for this cell - backtrack
-                stack.pop()
-                # Restore domains to state before this cell was attempted
-                domains = saved_domains
-                assigned.discard(cell)
-                working_grid.clear_value(cell[0], cell[1])
-                backtracks += 1
-                continue
-
-            # Try the next value
-            value = values_to_try.pop(0)
-
-            # Save domain state before assignment for potential backtrack
-            domains_before_assign = _copy_domains(domains)
-
-            # Assign value (Requirement 3.8 - states_explored incremented)
-            working_grid.set_value(cell[0], cell[1], value)
+            # Assign value
+            grid.set_value(cell[0], cell[1], value)
             domains[cell] = {value}
             assigned.add(cell)
-            states_explored += 1
+            metrics[0] += 1  # states_explored
 
             # Run AC-3 on affected arcs (Requirement 3.4)
             affected_arcs = _get_affected_arcs(cell)
             consistent = _ac3(domains, affected_arcs)
 
             if consistent:
-                # Check if all cells are assigned
-                if len(assigned) == 81:
-                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
-                    return SolveResult(
-                        solver_type=SolverType.INFORMED,
-                        status=SolveStatus.SOLVED,
-                        solved_grid=working_grid,
-                        time_ms=elapsed_ms,
-                        states_explored=states_explored,
-                        backtracks=backtracks,
-                    )
-
-                # Check if any unassigned cell has empty domain
-                domain_wipeout = False
+                # Check for domain wipeout
+                wipeout = False
                 for c, d in domains.items():
                     if c not in assigned and not d:
-                        domain_wipeout = True
+                        wipeout = True
                         break
 
-                if not domain_wipeout:
-                    # Select next variable and push new frame
-                    next_cell = _select_variable(domains, assigned)
-                    next_values = sorted(domains[next_cell])
-                    stack.append((next_cell, next_values, _copy_domains(domains)))
-                    continue
+                if not wipeout:
+                    # Auto-assign any new singletons created by propagation
+                    new_singletons = []
+                    for c, d in domains.items():
+                        if c not in assigned and len(d) == 1:
+                            new_singletons.append((c, next(iter(d))))
 
-            # Assignment failed - restore domains and undo assignment
-            domains = domains_before_assign
+                    for (sr, sc), sv in new_singletons:
+                        grid.set_value(sr, sc, sv)
+                        assigned.add((sr, sc))
+
+                    # Recurse
+                    result = self._backtrack(
+                        grid, domains, assigned, metrics, start_time, timeout
+                    )
+                    if result == "timeout":
+                        return "timeout"
+                    if result:
+                        return True
+
+                    # Undo singleton assignments
+                    for (sr, sc), _ in new_singletons:
+                        grid.clear_value(sr, sc)
+                        assigned.discard((sr, sc))
+
+            # Restore state (Requirement 3.5)
+            domains.clear()
+            domains.update(saved_domains)
+            grid.clear_value(cell[0], cell[1])
             assigned.discard(cell)
-            working_grid.clear_value(cell[0], cell[1])
+            metrics[1] += 1  # backtracks
 
-            # Update the saved_domains in the current stack frame
-            # (the frame still has remaining values to try)
-            stack[-1] = (cell, values_to_try, saved_domains)
-
-        # Stack empty - no solution found (Requirement 3.7)
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
-        return SolveResult(
-            solver_type=SolverType.INFORMED,
-            status=SolveStatus.UNSOLVABLE,
-            solved_grid=None,
-            time_ms=elapsed_ms,
-            states_explored=states_explored,
-            backtracks=backtracks,
-        )
+        return False
 
     def solve_stepwise(
         self, grid: Grid, timeout: float = 60.0
@@ -552,14 +593,13 @@ class InformedSolver(SolverProtocol):
         Same algorithm as solve() but yields StepEvent for:
         - ASSIGN events when a value is placed
         - BACKTRACK events when a value is undone
-        - PROPAGATE events when AC-3 reduces a domain
 
         Args:
             grid: The initial puzzle grid (not mutated).
             timeout: Maximum wall-clock seconds allowed. Defaults to 60.0.
 
         Yields:
-            StepEvent with step_type ASSIGN, BACKTRACK, or PROPAGATE.
+            StepEvent with step_type ASSIGN or BACKTRACK.
 
         Returns:
             SolveResult upon completion.
@@ -616,6 +656,9 @@ class InformedSolver(SolverProtocol):
                 if working_grid.get_cell(r, c).value is not None:
                     assigned.add((r, c))
 
+        # Auto-assign singletons from initial AC-3
+        self._assign_singletons(working_grid, domains, assigned)
+
         # If already complete
         if len(assigned) == 81:
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
@@ -629,122 +672,139 @@ class InformedSolver(SolverProtocol):
             )
 
         # Metrics
-        states_explored = 0
-        backtracks = 0
+        metrics = [0, 0]  # [states_explored, backtracks]
+        steps: list[StepEvent] = []
 
-        # Iterative backtracking with explicit stack
-        stack: list[tuple[tuple[int, int], list[int], dict[tuple[int, int], set[int]]]] = []
+        # Recursive solve collecting steps
+        result = self._backtrack_stepwise(
+            working_grid, domains, assigned, metrics, steps, start_time, timeout
+        )
 
-        # Select first variable
+        # Yield all collected steps
+        for step in steps:
+            yield step
+
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+        if result == "timeout":
+            return SolveResult(
+                solver_type=SolverType.INFORMED,
+                status=SolveStatus.TIMEOUT,
+                solved_grid=None,
+                time_ms=elapsed_ms,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            )
+        elif result:
+            return SolveResult(
+                solver_type=SolverType.INFORMED,
+                status=SolveStatus.SOLVED,
+                solved_grid=working_grid,
+                time_ms=elapsed_ms,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            )
+        else:
+            return SolveResult(
+                solver_type=SolverType.INFORMED,
+                status=SolveStatus.UNSOLVABLE,
+                solved_grid=None,
+                time_ms=elapsed_ms,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            )
+
+    def _backtrack_stepwise(
+        self,
+        grid: Grid,
+        domains: dict[tuple[int, int], set[int]],
+        assigned: set[tuple[int, int]],
+        metrics: list[int],
+        steps: list[StepEvent],
+        start_time: float,
+        timeout: float,
+    ) -> object:
+        """Recursive backtracking with step event collection."""
+        if time.monotonic() - start_time >= timeout:
+            return "timeout"
+
+        if len(assigned) == 81:
+            return True
+
+        for cell, domain in domains.items():
+            if cell not in assigned and not domain:
+                return False
+
         cell = _select_variable(domains, assigned)
         values_to_try = sorted(domains[cell])
-        stack.append((cell, values_to_try, _copy_domains(domains)))
 
-        while stack:
-            # Check timeout
+        for value in values_to_try:
             if time.monotonic() - start_time >= timeout:
-                elapsed_ms = int((time.monotonic() - start_time) * 1000)
-                return SolveResult(
-                    solver_type=SolverType.INFORMED,
-                    status=SolveStatus.TIMEOUT,
-                    solved_grid=None,
-                    time_ms=elapsed_ms,
-                    states_explored=states_explored,
-                    backtracks=backtracks,
-                )
+                return "timeout"
 
-            cell, values_to_try, saved_domains = stack[-1]
+            saved_domains = _copy_domains(domains)
 
-            if not values_to_try:
-                # No more values - backtrack
-                stack.pop()
-                domains = saved_domains
-                previous_value = working_grid.get_cell(cell[0], cell[1]).value
-                assigned.discard(cell)
-                working_grid.clear_value(cell[0], cell[1])
-                backtracks += 1
-
-                # Emit BACKTRACK event
-                yield StepEvent(
-                    step_type=StepType.BACKTRACK,
-                    row=cell[0],
-                    col=cell[1],
-                    value=None,
-                    previous_value=previous_value,
-                    states_explored=states_explored,
-                    backtracks=backtracks,
-                )
-                continue
-
-            # Try next value
-            value = values_to_try.pop(0)
-
-            # Save domain state
-            domains_before_assign = _copy_domains(domains)
-
-            # Assign value
-            working_grid.set_value(cell[0], cell[1], value)
+            grid.set_value(cell[0], cell[1], value)
             domains[cell] = {value}
             assigned.add(cell)
-            states_explored += 1
+            metrics[0] += 1
 
-            # Emit ASSIGN event
-            yield StepEvent(
+            steps.append(StepEvent(
                 step_type=StepType.ASSIGN,
                 row=cell[0],
                 col=cell[1],
                 value=value,
                 previous_value=None,
-                states_explored=states_explored,
-                backtracks=backtracks,
-            )
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            ))
 
-            # Run AC-3 on affected arcs
             affected_arcs = _get_affected_arcs(cell)
             consistent = _ac3(domains, affected_arcs)
 
             if consistent:
-                # Check if solved
-                if len(assigned) == 81:
-                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
-                    return SolveResult(
-                        solver_type=SolverType.INFORMED,
-                        status=SolveStatus.SOLVED,
-                        solved_grid=working_grid,
-                        time_ms=elapsed_ms,
-                        states_explored=states_explored,
-                        backtracks=backtracks,
-                    )
-
-                # Check for domain wipeout
-                domain_wipeout = False
+                wipeout = False
                 for c, d in domains.items():
                     if c not in assigned and not d:
-                        domain_wipeout = True
+                        wipeout = True
                         break
 
-                if not domain_wipeout:
-                    # Select next variable and push frame
-                    next_cell = _select_variable(domains, assigned)
-                    next_values = sorted(domains[next_cell])
-                    stack.append((next_cell, next_values, _copy_domains(domains)))
-                    continue
+                if not wipeout:
+                    new_singletons = []
+                    for c, d in domains.items():
+                        if c not in assigned and len(d) == 1:
+                            new_singletons.append((c, next(iter(d))))
 
-            # Assignment failed - restore
-            domains = domains_before_assign
+                    for (sr, sc), sv in new_singletons:
+                        grid.set_value(sr, sc, sv)
+                        assigned.add((sr, sc))
+
+                    result = self._backtrack_stepwise(
+                        grid, domains, assigned, metrics, steps, start_time, timeout
+                    )
+                    if result == "timeout":
+                        return "timeout"
+                    if result:
+                        return True
+
+                    for (sr, sc), _ in new_singletons:
+                        grid.clear_value(sr, sc)
+                        assigned.discard((sr, sc))
+
+            domains.clear()
+            domains.update(saved_domains)
+            grid.clear_value(cell[0], cell[1])
             assigned.discard(cell)
-            working_grid.clear_value(cell[0], cell[1])
+            metrics[1] += 1
 
-            # Update stack frame
-            stack[-1] = (cell, values_to_try, saved_domains)
+            steps.append(StepEvent(
+                step_type=StepType.BACKTRACK,
+                row=cell[0],
+                col=cell[1],
+                value=None,
+                previous_value=value,
+                states_explored=metrics[0],
+                backtracks=metrics[1],
+            ))
 
-        # No solution found
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
-        return SolveResult(
-            solver_type=SolverType.INFORMED,
-            status=SolveStatus.UNSOLVABLE,
-            solved_grid=None,
-            time_ms=elapsed_ms,
-            states_explored=states_explored,
-            backtracks=backtracks,
-        )
+        return False

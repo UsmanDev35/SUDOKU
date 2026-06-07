@@ -9,6 +9,8 @@ Requirements: 8.1, 8.2, 8.6, 8.7, 8.8, 8.9
 
 from __future__ import annotations
 
+import os
+import time
 import uuid
 from typing import Optional
 
@@ -16,6 +18,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from sudoku_solver_evaluator.adversarial.race import RaceController
 from sudoku_solver_evaluator.evaluator.performance import PerformanceEvaluator
 from sudoku_solver_evaluator.generator.puzzle_generator import PuzzleGenerator
 from sudoku_solver_evaluator.models.enums import DifficultyLevel, SolveStatus, SolverType
@@ -276,7 +279,7 @@ class CLI:
         name = _SOLVER_NAMES[solver_type]
 
         if result.status == SolveStatus.SOLVED:
-            self.console.print(f"  [bold green]✓ {name}: SOLVED[/bold green]")
+            self.console.print(f"  [bold green][SOLVED] {name}[/bold green]")
             self.console.print(
                 f"    Time: {result.time_ms} ms  |  "
                 f"States: {result.states_explored:,}  |  "
@@ -286,23 +289,27 @@ class CLI:
                 self.console.print()
                 print_grid(result.solved_grid, console=self.console)
         elif result.status == SolveStatus.TIMEOUT:
-            self.console.print(f"  [bold yellow]⏱ {name}: TIMEOUT[/bold yellow]")
+            self.console.print(f"  [bold yellow][TIMEOUT] {name}[/bold yellow]")
             self.console.print(
                 f"    Time: {result.time_ms} ms  |  "
                 f"States: {result.states_explored:,}  |  "
                 f"Backtracks: {result.backtracks:,}"
             )
         elif result.status == SolveStatus.UNSOLVABLE:
-            self.console.print(f"  [bold red]✗ {name}: UNSOLVABLE[/bold red]")
+            self.console.print(f"  [bold red][UNSOLVABLE] {name}[/bold red]")
         elif result.status == SolveStatus.FAILED:
-            self.console.print(f"  [bold red]✗ {name}: FAILED[/bold red]")
+            self.console.print(f"  [bold red][FAILED] {name}[/bold red]")
             self.console.print(
                 f"    States: {result.states_explored:,}  |  "
                 f"Restarts: {result.restarts}"
             )
 
     def _step_by_step_mode(self) -> None:
-        """Handle step-by-step visualization mode."""
+        """Handle step-by-step visualization using simple console output.
+
+        Uses screen clearing and simple print statements for reliable
+        Windows-compatible step-by-step animation (no Rich Live).
+        """
         if self.current_puzzle is None:
             self.console.print(
                 "\n  [bold yellow]No puzzle generated yet.[/bold yellow] "
@@ -336,35 +343,166 @@ class CLI:
 
         # Ask for delay
         delay_input = self._get_input(
-            "Step delay in ms (100-2000, default 500)", default="500"
+            "Step delay in ms (50-2000, default 200)", default="200"
         )
         try:
-            delay_ms = int(delay_input)
+            delay_ms = max(50, min(2000, int(delay_input)))
         except ValueError:
-            delay_ms = 500
+            delay_ms = 200
 
         self.console.print(
             f"\n  Running [bold]{_SOLVER_NAMES[solver_type]}[/bold] step-by-step "
             f"(delay: {delay_ms}ms)..."
         )
-        self.console.print("  Controls: p=pause, r=resume, s=skip to end\n")
+        self.console.print("  Press Ctrl+C to skip to end.\n")
+        time.sleep(1)
 
         # Get stepwise generator
         step_gen = self.solver_manager.solve_stepwise(
             self.current_puzzle, solver_type
         )
 
-        # Run visualization
-        controller = VisualizationController(
-            grid=self.current_puzzle, delay_ms=delay_ms
-        )
-        result = controller.run(step_gen)
+        # Run the simple console-based step-by-step animation
+        result = self._run_step_animation(step_gen, delay_ms)
 
         # Record result
         self.evaluator.record(result, self.current_puzzle_id, self.current_difficulty)
 
         # Display final result
         self._display_solve_result(solver_type, result)
+
+    def _run_step_animation(self, step_generator, delay_ms: int):
+        """Run step-by-step animation using screen clearing and print.
+
+        Shows the grid after each assignment/backtrack with clear screen
+        between steps. Shows current cell, value, states, and backtracks.
+
+        Args:
+            step_generator: Generator yielding StepEvent objects.
+            delay_ms: Delay between steps in milliseconds.
+
+        Returns:
+            The SolveResult from the solver.
+        """
+        from sudoku_solver_evaluator.models.enums import StepType
+        from sudoku_solver_evaluator.models.metrics import SolveResult
+
+        # Build a working copy of the grid for display
+        working_grid = self.current_puzzle.copy()
+        skipping = False
+
+        try:
+            while True:
+                try:
+                    step_event = next(step_generator)
+                except StopIteration as e:
+                    result = e.value
+                    break
+
+                # Apply the step to our working grid
+                if step_event.step_type == StepType.ASSIGN:
+                    working_grid.set_value(step_event.row, step_event.col, step_event.value)
+                elif step_event.step_type == StepType.BACKTRACK:
+                    working_grid.clear_value(step_event.row, step_event.col)
+                elif step_event.step_type == StepType.PROPAGATE:
+                    if step_event.value is not None:
+                        working_grid.set_value(step_event.row, step_event.col, step_event.value)
+
+                if not skipping:
+                    try:
+                        # Clear screen
+                        os.system('cls' if os.name == 'nt' else 'clear')
+
+                        # Print header
+                        print("=" * 50)
+                        print("  STEP-BY-STEP SOLVING")
+                        print("=" * 50)
+
+                        # Print step info
+                        if step_event.step_type == StepType.ASSIGN:
+                            print(f"  ASSIGN: Cell ({step_event.row+1},{step_event.col+1}) = {step_event.value}")
+                        elif step_event.step_type == StepType.BACKTRACK:
+                            print(f"  *** BACKTRACK *** Cell ({step_event.row+1},{step_event.col+1}) cleared")
+                        elif step_event.step_type == StepType.SWAP:
+                            print(f"  SWAP: Cell ({step_event.row+1},{step_event.col+1})")
+                        elif step_event.step_type == StepType.PROPAGATE:
+                            print(f"  PROPAGATE: Cell ({step_event.row+1},{step_event.col+1}) = {step_event.value}")
+
+                        print(f"  States: {step_event.states_explored}  |  Backtracks: {step_event.backtracks}")
+                        print("=" * 50)
+
+                        # Print the grid using simple text
+                        self._print_simple_grid(working_grid, step_event)
+
+                        # Delay
+                        time.sleep(delay_ms / 1000.0)
+
+                    except KeyboardInterrupt:
+                        skipping = True
+                        print("\n  Skipping to end...")
+
+        except KeyboardInterrupt:
+            # If interrupted during generator iteration, get result from exhausting
+            skipping = True
+            try:
+                while True:
+                    step_event = next(step_generator)
+                    if step_event.step_type == StepType.ASSIGN:
+                        working_grid.set_value(step_event.row, step_event.col, step_event.value)
+                    elif step_event.step_type == StepType.BACKTRACK:
+                        working_grid.clear_value(step_event.row, step_event.col)
+            except StopIteration as e:
+                result = e.value
+
+        return result
+
+    def _print_simple_grid(self, grid: Grid, step_event=None) -> None:
+        """Print the grid in simple text format with markers for active cells.
+
+        Args:
+            grid: The current grid state.
+            step_event: Current step event for highlighting.
+        """
+        from sudoku_solver_evaluator.models.enums import StepType
+
+        highlight_row = step_event.row if step_event else -1
+        highlight_col = step_event.col if step_event else -1
+        is_backtrack = step_event and step_event.step_type == StepType.BACKTRACK
+
+        print()
+        print("     1   2   3    4   5   6    7   8   9")
+        print("   +-----------+-----------+-----------+")
+
+        for row in range(9):
+            if row > 0 and row % 3 == 0:
+                print("   +-----------+-----------+-----------+")
+
+            line = f" {row+1} |"
+            for col in range(9):
+                if col > 0 and col % 3 == 0:
+                    line += "|"
+
+                cell = grid.get_cell(row, col)
+                if row == highlight_row and col == highlight_col:
+                    if is_backtrack:
+                        marker = " X "
+                    elif cell.value is not None:
+                        marker = f"[{cell.value}]"
+                    else:
+                        marker = "[.]"
+                elif cell.value is not None:
+                    if cell.is_fixed:
+                        marker = f" {cell.value} "
+                    else:
+                        marker = f" {cell.value} "
+                else:
+                    marker = " . "
+                line += marker
+
+            line += "|"
+            print(line)
+
+        print("   +-----------+-----------+-----------+")
 
     def _view_dashboard(self) -> None:
         """Display the comparative analysis dashboard."""
@@ -401,13 +539,129 @@ class CLI:
         render_full_dashboard(comparisons, aggregates, console=self.console)
 
     def _adversarial_mode(self) -> None:
-        """Handle adversarial mode (placeholder for task 14)."""
+        """Handle adversarial mode: select two solvers, race them on a puzzle."""
         self.console.print()
         self.console.rule("[bold]Adversarial Mode[/bold]")
+        self.console.print()
+        self.console.print("  Select two different solvers to race against each other.")
+        self.console.print()
+
+        solvers = list(SolverType)
+        for i, solver_type in enumerate(solvers, 1):
+            self.console.print(f"  [bold]{i}.[/bold] {_SOLVER_NAMES[solver_type]}")
+        self.console.print()
+
+        # Select first solver
+        choice_a = self._get_input(f"Select first solver (1-{len(solvers)})")
+        try:
+            idx_a = int(choice_a) - 1
+            if idx_a < 0 or idx_a >= len(solvers):
+                self._show_invalid_input(f"1-{len(solvers)}")
+                return
+        except ValueError:
+            self._show_invalid_input(f"1-{len(solvers)}")
+            return
+
+        # Select second solver
+        choice_b = self._get_input(f"Select second solver (1-{len(solvers)})")
+        try:
+            idx_b = int(choice_b) - 1
+            if idx_b < 0 or idx_b >= len(solvers):
+                self._show_invalid_input(f"1-{len(solvers)}")
+                return
+        except ValueError:
+            self._show_invalid_input(f"1-{len(solvers)}")
+            return
+
+        if idx_a == idx_b:
+            self.console.print(
+                "\n  [bold red]Error:[/bold red] Please select two different solvers.\n"
+            )
+            return
+
+        solver_a = solvers[idx_a]
+        solver_b = solvers[idx_b]
+
+        # Generate a medium puzzle for the race
+        self.console.print("\n  Generating a Medium puzzle for the race...")
+        try:
+            puzzle = self.generator.generate(DifficultyLevel.MEDIUM)
+        except TimeoutError:
+            self.console.print(
+                "\n  [bold red]Error:[/bold red] Puzzle generation timed out. "
+                "Please try again."
+            )
+            return
+
         self.console.print(
-            "\n  [bold yellow]Adversarial mode is not yet implemented.[/bold yellow]"
+            f"  Puzzle ready! Filled cells: [bold]{puzzle.count_filled()}[/bold]"
         )
-        self.console.print("  This feature will be available in a future update.\n")
+        self.console.print()
+        print_grid(puzzle, console=self.console)
+
+        self.console.print(
+            f"\n  Racing: [bold]{_SOLVER_NAMES[solver_a]}[/bold] vs "
+            f"[bold]{_SOLVER_NAMES[solver_b]}[/bold]..."
+        )
+        self.console.print("  Please wait...\n")
+
+        # Run the race
+        race_controller = RaceController(solver_manager=self.solver_manager)
+        race_result = race_controller.start_race(
+            grid=puzzle,
+            solver_a=solver_a,
+            solver_b=solver_b,
+            timeout=60.0,
+        )
+
+        # Display results
+        self.console.print()
+        self.console.rule("[bold cyan]Race Results[/bold cyan]")
+        self.console.print()
+
+        # Solver A results
+        res_a = race_result.solver_a_result
+        self.console.print(f"  [bold]{_SOLVER_NAMES[solver_a]}[/bold]:")
+        self.console.print(
+            f"    Status: {res_a.status.value}  |  Time: {res_a.time_ms}ms  |  "
+            f"States: {res_a.states_explored:,}  |  Backtracks: {res_a.backtracks:,}"
+        )
+
+        # Solver B results
+        res_b = race_result.solver_b_result
+        self.console.print(f"\n  [bold]{_SOLVER_NAMES[solver_b]}[/bold]:")
+        self.console.print(
+            f"    Status: {res_b.status.value}  |  Time: {res_b.time_ms}ms  |  "
+            f"States: {res_b.states_explored:,}  |  Backtracks: {res_b.backtracks:,}"
+        )
+
+        # Winner announcement
+        self.console.print()
+        if race_result.winner is not None:
+            winner_name = _SOLVER_NAMES[race_result.winner]
+            self.console.print(
+                f"  [bold green]WINNER: {winner_name}[/bold green] "
+                f"(by {race_result.time_difference_ms}ms)"
+            )
+        else:
+            # Check if it's a tie or both failed
+            if (res_a.status == SolveStatus.SOLVED and
+                    res_b.status == SolveStatus.SOLVED):
+                self.console.print(
+                    f"  [bold yellow]TIE![/bold yellow] Both solved within "
+                    f"{race_result.time_difference_ms}ms of each other."
+                )
+            elif (res_a.status == SolveStatus.TIMEOUT and
+                  res_b.status == SolveStatus.TIMEOUT):
+                self.console.print(
+                    "  [bold red]Both solvers timed out.[/bold red] No winner."
+                )
+            else:
+                self.console.print(
+                    "  [bold yellow]No winner.[/bold yellow] "
+                    "Neither solver completed successfully."
+                )
+        self.console.print()
 
     def _export_csv(self) -> None:
         """Handle CSV export: prompt for filepath and export results."""
@@ -431,7 +685,7 @@ class CLI:
         try:
             self.evaluator.export_csv(filepath)
             self.console.print(
-                f"\n  [bold green]✓ Results exported to:[/bold green] {filepath}\n"
+                f"\n  [bold green]Results exported to:[/bold green] {filepath}\n"
             )
         except Exception as e:
             self.console.print(
